@@ -46,3 +46,4 @@ main,.panel,.grid,.header-actions,.result-heading>div{min-width:0}button,input,s
  footer{font-size:14px;line-height:1.8;padding:23px 10px}.empty{padding:26px 8px;font-size:14px}.empty strong{font-size:18px}
 }
 @media screen and (max-width:360px){main{padding:10px}.panel{padding:13px}.hero h1{font-size:21px}.legend{gap:9px;font-size:12px}.date-controls{grid-template-columns:1fr}.date-controls label,#goToday{grid-column:1}.coverage-table tr{padding:6px 12px}}
+@media screen and (max-width:700px){.actions>label.choice{display:flex;flex-direction:column;align-items:stretch;min-width:0;width:100%;white-space:normal}.actions>label.choice input[type=file]{display:block;min-width:0;width:100%;max-width:100%!important;font-size:13px}.checkline{flex-wrap:wrap}.panel button{max-width:100%;overflow-wrap:anywhere}}
