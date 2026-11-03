@@ -75,16 +75,8 @@ function allocate(tasks,teachers,day,absent,pool,history,cap=2,locked=[],referen
  }
  return (best||tasks.map(a=>({...a,cover:'',locked:false}))).sort((a,b)=>a.period-b.period||a.key.localeCompare(b.key));
 }
-function allocateWithFallback(tasks,teachers,day,absent,pool,history,cap=2,locked=[],referenceDate=''){
- const helpers=new Set(teachers.filter(t=>t.fallbackOnly===true).map(t=>t.id));
- const first=allocate(tasks,teachers,day,absent,pool.filter(id=>!helpers.has(id)),history,cap,locked,referenceDate);
- if(!first.some(a=>!a.cover&&!a.locked))return first.map(a=>({...a,fallback:!!a.cover&&helpers.has(a.cover)}));
- // Freeze all successful first-stage choices; helpers fill only the remaining unassigned lessons.
- const fixed=first.filter(a=>a.cover||a.locked).map(a=>({...a,locked:true}));
- const second=allocate(tasks,teachers,day,absent,pool.filter(id=>helpers.has(id)),history,cap,fixed,referenceDate);
- return second.map(a=>{const original=first.find(b=>b.key===a.key);return {...a,locked:original.cover||original.locked?original.locked:a.locked,manual:original.cover?original.manual:a.manual,fallback:!!a.cover&&helpers.has(a.cover)}});
-}
-root.Ihtiyat={allocate,allocateWithFallback,canAssign,runAt,dailyLimit};if(typeof module!=='undefined')module.exports={allocate,allocateWithFallback,canAssign,runAt,dailyLimit};
+root.Ihtiyat={allocate,canAssign,runAt,dailyLimit};if(typeof module!=='undefined')module.exports={allocate,canAssign,runAt,dailyLimit};
 })(typeof window!=='undefined'?window:globalThis);
+
 
 
