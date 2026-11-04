@@ -13,13 +13,17 @@ function solve(tasks,teachers,day,absent,pool,history,cap=2,locked=[],referenceD
  function edge(a,b,capacity,cost){const f={to:b,rev:graph[b].length,capacity,cost},r={to:a,rev:graph[a].length,capacity:0,cost:-cost};graph[a].push(f);graph[b].push(r);return f}
  const teacherNodes=new Map(),periodNodes=new Map();
  for(const t of candidates){const tn=node();teacherNodes.set(t.id,tn);for(let k=counts[t.id]||0;k<dailyLimit(t,cap,history,referenceDate);k++)edge(tn,sink,1,k*25);}
+ const previousAssignments=history.reduce((total,h)=>total+h.assignments.length,0);
+ const maxLoad=Math.max(0,...candidates.map(t=>t.load));
+ // One admin assignment costs more than every ordinary scoring term combined.
+ const adminPenalty=(tasks.length+1)*((maxLoad*2+previousAssignments*6+60+cap*25)*100+pool.length+1);
  const choices=[];
  for(const job of jobs){const jn=node();edge(source,jn,1,0);const options=[];
   for(const t of candidates){const key=t.id+':'+job.period;if(forbidden.has(t.id+':'+job.key)||!canAssign(t,day,job.period,result,cap,history,referenceDate))continue;
    let pn=periodNodes.get(key);if(pn===undefined){pn=node();periodNodes.set(key,pn);edge(pn,teacherNodes.get(t.id),1,0)}
    const prior=history.reduce((n,h)=>n+h.assignments.filter(a=>a.cover===t.id).length,0),daily=t.schedule[day].filter(Boolean).length;
    const adjacent=[job.period-1,job.period+1].filter(p=>p>=0&&p<8&&t.schedule[day][p]).length;
-   const cost=Math.round((t.load*2+prior*6+daily*3+adjacent*18)*100)+Math.max(0,pool.indexOf(t.id));
+   const cost=Math.round((t.load*2+prior*6+daily*3+adjacent*18)*100)+Math.max(0,pool.indexOf(t.id))+(t.role==='admin'?adminPenalty:0);
    // Per-assignment marginal cost is scaled to the same unit as base cost.
    options.push({teacher:t.id,edge:edge(jn,pn,1,cost)});
   }choices.push({job,options});
@@ -59,18 +63,23 @@ function violation(result,teachers,day){
 }
 function allocate(tasks,teachers,day,absent,pool,history,cap=2,locked=[],referenceDate=''){
  // Branch over conflicting assignment combinations. Every returned result respects rest constraints.
- const pending=[new Set()],seen=new Set();let best=null,bestCount=-1;
+ const pending=[new Set()],seen=new Set();let best=null,bestCount=-1,bestAdminCount=Infinity;
+ const adminIds=new Set(teachers.filter(t=>t.role==='admin').map(t=>t.id));
+ const adminCount=rows=>rows.filter(a=>adminIds.has(a.cover)).length;
+ const improves=(covered,admins)=>covered>bestCount||(covered===bestCount&&admins<bestAdminCount);
  for(let attempt=0;pending.length&&attempt<400;attempt++){
   const ban=pending.pop(),signature=[...ban].sort().join('|');if(seen.has(signature))continue;seen.add(signature);
   const result=solve(tasks,teachers,day,absent,pool,history,cap,locked,referenceDate,ban),count=result.filter(a=>a.cover).length;
-  if(count<=bestCount)continue;
+  const admins=adminCount(result);
+  if(!improves(count,admins))continue;
   const conflict=violation(result,teachers,day);
-  if(!conflict){best=result;bestCount=count;if(count===tasks.length)return best;continue;}
+  if(!conflict){best=result;bestCount=count;bestAdminCount=admins;if(count===tasks.length&&admins===0)return best;continue;}
   // Retain a safe fallback while exploring alternatives that preserve coverage.
   const safe=[];for(const a of [...result].sort((a,b)=>Number(b.locked)-Number(a.locked)||a.period-b.period)){
    const t=teachers.find(t=>t.id===a.cover);safe.push(t&&!canAssign(t,day,a.period,safe,cap,history,referenceDate)?{...a,cover:'',locked:false}:a);
   }
-  const safeCount=safe.filter(a=>a.cover).length;if(safeCount>bestCount){best=safe;bestCount=safeCount;}
+  const safeCount=safe.filter(a=>a.cover).length,safeAdmins=adminCount(safe);
+  if(improves(safeCount,safeAdmins)){best=safe;bestCount=safeCount;bestAdminCount=safeAdmins;}
   for(const a of conflict){const next=new Set(ban);next.add(a.cover+':'+a.key);pending.push(next);}
  }
  return (best||tasks.map(a=>({...a,cover:'',locked:false}))).sort((a,b)=>a.period-b.period||a.key.localeCompare(b.key));
