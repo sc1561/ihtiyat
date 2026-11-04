@@ -1,6 +1,6 @@
 (function(root){
 // Min-cost maximum flow: cover as many lessons as possible, then balance load.
-function solve(tasks,teachers,day,absent,pool,history,cap=2,locked=[],referenceDate="",forbidden=new Set()){
+function solve(tasks,teachers,day,absent,pool,history,cap=2,locked=[],referenceDate="",forbidden=new Set(),secondaryIds=new Set()){
  const staff=new Map(teachers.map(t=>[t.id,t])),poolSet=new Set(pool),absentSet=new Set(absent),used=new Set(),counts={},result=[];
  const jobsByKey=new Map(tasks.map(t=>[t.key,t]));
  for(const a of locked){const job=jobsByKey.get(a.key),t=staff.get(a.cover);if(!job)continue;
@@ -15,15 +15,15 @@ function solve(tasks,teachers,day,absent,pool,history,cap=2,locked=[],referenceD
  for(const t of candidates){const tn=node();teacherNodes.set(t.id,tn);for(let k=counts[t.id]||0;k<dailyLimit(t,cap,history,referenceDate);k++)edge(tn,sink,1,k*25);}
  const previousAssignments=history.reduce((total,h)=>total+h.assignments.length,0);
  const maxLoad=Math.max(0,...candidates.map(t=>t.load));
- // One admin assignment costs more than every ordinary scoring term combined.
- const adminPenalty=(tasks.length+1)*((maxLoad*2+previousAssignments*6+60+cap*25)*100+pool.length+1);
+ // One secondary assignment costs more than every ordinary scoring term combined.
+ const secondaryPenalty=(tasks.length+1)*((maxLoad*2+previousAssignments*6+60+cap*25)*100+pool.length+1);
  const choices=[];
  for(const job of jobs){const jn=node();edge(source,jn,1,0);const options=[];
   for(const t of candidates){const key=t.id+':'+job.period;if(forbidden.has(t.id+':'+job.key)||!canAssign(t,day,job.period,result,cap,history,referenceDate))continue;
    let pn=periodNodes.get(key);if(pn===undefined){pn=node();periodNodes.set(key,pn);edge(pn,teacherNodes.get(t.id),1,0)}
    const prior=history.reduce((n,h)=>n+h.assignments.filter(a=>a.cover===t.id).length,0),daily=t.schedule[day].filter(Boolean).length;
    const adjacent=[job.period-1,job.period+1].filter(p=>p>=0&&p<8&&t.schedule[day][p]).length;
-   const cost=Math.round((t.load*2+prior*6+daily*3+adjacent*18)*100)+Math.max(0,pool.indexOf(t.id))+(t.role==='admin'?adminPenalty:0);
+   const cost=Math.round((t.load*2+prior*6+daily*3+adjacent*18)*100)+Math.max(0,pool.indexOf(t.id))+(secondaryIds.has(t.id)?secondaryPenalty:0);
    // Per-assignment marginal cost is scaled to the same unit as base cost.
    options.push({teacher:t.id,edge:edge(jn,pn,1,cost)});
   }choices.push({job,options});
@@ -61,25 +61,26 @@ function violation(result,teachers,day){
   return result.filter(b=>b.cover===t.id&&b.period>=l&&b.period<=r&&!b.locked);
  }return null;
 }
-function allocate(tasks,teachers,day,absent,pool,history,cap=2,locked=[],referenceDate=''){
+function allocate(tasks,teachers,day,absent,pool,history,cap=2,locked=[],referenceDate='',preferredPool=null){
  // Branch over conflicting assignment combinations. Every returned result respects rest constraints.
- const pending=[new Set()],seen=new Set();let best=null,bestCount=-1,bestAdminCount=Infinity;
- const adminIds=new Set(teachers.filter(t=>t.role==='admin').map(t=>t.id));
- const adminCount=rows=>rows.filter(a=>adminIds.has(a.cover)).length;
- const improves=(covered,admins)=>covered>bestCount||(covered===bestCount&&admins<bestAdminCount);
+ const pending=[new Set()],seen=new Set();let best=null,bestCount=-1,bestSecondaryCount=Infinity;
+ const preferred=preferredPool&&new Set(preferredPool);
+ const secondaryIds=new Set(teachers.filter(t=>preferred?!preferred.has(t.id):t.role==='admin').map(t=>t.id));
+ const secondaryCount=rows=>rows.filter(a=>secondaryIds.has(a.cover)).length;
+ const improves=(covered,secondary)=>covered>bestCount||(covered===bestCount&&secondary<bestSecondaryCount);
  for(let attempt=0;pending.length&&attempt<400;attempt++){
   const ban=pending.pop(),signature=[...ban].sort().join('|');if(seen.has(signature))continue;seen.add(signature);
-  const result=solve(tasks,teachers,day,absent,pool,history,cap,locked,referenceDate,ban),count=result.filter(a=>a.cover).length;
-  const admins=adminCount(result);
-  if(!improves(count,admins))continue;
+  const result=solve(tasks,teachers,day,absent,pool,history,cap,locked,referenceDate,ban,secondaryIds),count=result.filter(a=>a.cover).length;
+  const secondary=secondaryCount(result);
+  if(!improves(count,secondary))continue;
   const conflict=violation(result,teachers,day);
-  if(!conflict){best=result;bestCount=count;bestAdminCount=admins;if(count===tasks.length&&admins===0)return best;continue;}
+  if(!conflict){best=result;bestCount=count;bestSecondaryCount=secondary;if(count===tasks.length&&secondary===0)return best;continue;}
   // Retain a safe fallback while exploring alternatives that preserve coverage.
   const safe=[];for(const a of [...result].sort((a,b)=>Number(b.locked)-Number(a.locked)||a.period-b.period)){
    const t=teachers.find(t=>t.id===a.cover);safe.push(t&&!canAssign(t,day,a.period,safe,cap,history,referenceDate)?{...a,cover:'',locked:false}:a);
   }
-  const safeCount=safe.filter(a=>a.cover).length,safeAdmins=adminCount(safe);
-  if(improves(safeCount,safeAdmins)){best=safe;bestCount=safeCount;bestAdminCount=safeAdmins;}
+  const safeCount=safe.filter(a=>a.cover).length,safeSecondary=secondaryCount(safe);
+  if(improves(safeCount,safeSecondary)){best=safe;bestCount=safeCount;bestSecondaryCount=safeSecondary;}
   for(const a of conflict){const next=new Set(ban);next.add(a.cover+':'+a.key);pending.push(next);}
  }
  return (best||tasks.map(a=>({...a,cover:'',locked:false}))).sort((a,b)=>a.period-b.period||a.key.localeCompare(b.key));
