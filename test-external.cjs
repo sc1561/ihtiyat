@@ -3,8 +3,8 @@ for(let d=0;d<5;d++){
  el('#date').value='2026-11-0'+(1+d);vm.runInContext('showExternal=false;showExternalTeachers=false;draft=[];absent=[];renderToday()',c);
  assert(el('#content').innerHTML.includes('id="external"'));let pool=vm.runInContext('activePool()',c);assert(!pool.some(id=>source.find(t=>t.id===id)?.role==='admin'));
  el('#external').checked=true;el('#external').onchange();assert(!el('#content').innerHTML.includes('id="externalStaff"'));assert.equal(calls,d*2,'toggle must not distribute automatically');
- const period=source.find(t=>t.id==='46').schedule[d].findIndex(v=>!v);c.period=period;let opts=vm.runInContext('validOptions({key:"test",period},showExternal)',c);assert(opts.some(t=>t.name==='أحمد العامري'));assert(opts.some(t=>t.name==='ناصر الكندي'));
- vm.runInContext('absent=["1"]',c);el('#distribute').onclick();assert(lastPool.includes('admin-ahmed-alamri'));assert(lastPool.includes('46'));assert(source.every(t=>t.role==='admin'||vm.runInContext('dayPool()',c).includes(t.id)||!lastPool.includes(t.id)));assert.equal(calls,d*2+1);
+ const period=source.find(t=>t.id==='46').schedule[d].findIndex(v=>!v);c.period=period;let opts=vm.runInContext('validOptions({key:"test",period},showExternal)',c);assert(!opts.some(t=>t.name==='أحمد العامري'));assert(opts.some(t=>t.name==='ناصر الكندي'));
+ vm.runInContext('absent=["1"]',c);el('#distribute').onclick();assert(!lastPool.includes('admin-ahmed-alamri'));assert(lastPool.includes('46'));assert(source.every(t=>t.role==='admin'||vm.runInContext('dayPool()',c).includes(t.id)||!lastPool.includes(t.id)));assert.equal(calls,d*2+1);
  vm.runInContext('draft=[];absent=[]',c);const busy=source.find(t=>t.id==='46').schedule[d].findIndex(Boolean);if(busy>=0){c.period=busy;assert(!vm.runInContext('validOptions({key:"test",period},showExternal)',c).some(t=>t.id==='46'));}
  el('#external').checked=false;el('#external').onchange();assert(!vm.runInContext('validOptions({key:"test",period:0},showExternal)',c).some(t=>t.role==='admin'));
  vm.runInContext('absent=["1"]',c);el('#distribute').onclick();assert(!lastPool.includes('admin-ahmed-alamri'));assert.equal(calls,(d+1)*2);
